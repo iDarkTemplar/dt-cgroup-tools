@@ -19,8 +19,12 @@
  */
 
 #include <stdio.h>
+#include <string.h>
 #include <unistd.h>
 #include <pwd.h>
+#include <errno.h>
+
+#include <linux/limits.h>
 
 #include <lua.h>
 #include <lauxlib.h>
@@ -100,10 +104,25 @@ int is_path_allowed(const char *path)
 int main(int argc, char **argv)
 {
 	int rc;
+	char cgroup_file[PATH_MAX] = { 0 };
+	FILE *cgroup_handle;
+	uid_t original_uid;
 
 	if (argc < 3)
 	{
 		fprintf(stderr, "USAGE: %s cgroup_dir executable [args ...]\n", argv[0]);
+		return -1;
+	}
+
+	if (strlen(argv[1]) + sizeof("/cgroup.procs") - 1 >= PATH_MAX)
+	{
+		fprintf(stderr, "Error: path \"%s/cgroup.procs\" is too long\n", argv[1]);
+		return -1;
+	}
+
+	if (snprintf(cgroup_file, PATH_MAX, "%s/cgroup.procs", argv[1]) < 0)
+	{
+		fprintf(stderr, "Error: failed to process cgroup path\n");
 		return -1;
 	}
 
@@ -118,5 +137,38 @@ int main(int argc, char **argv)
 		return -1;
 	}
 
-	return 0;
+	original_uid = geteuid();
+	if (seteuid(0) < 0)
+	{
+		fprintf(stderr, "Error: seteuid failed with error %d, %s\n", errno, strerror(errno));
+		return -1;
+	}
+
+	cgroup_handle = fopen(cgroup_file, "at");
+	if (cgroup_handle == NULL)
+	{
+		fprintf(stderr, "Error: failed to open file \"%s\" with error %d, %s\n", cgroup_file, errno, strerror(errno));
+		return -1;
+	}
+
+	if (fprintf(cgroup_handle, "%llu\n", (unsigned long long) getpid()) < 0)
+	{
+		fprintf(stderr, "Error: failed to write file \"%s\" with error %d, %s\n", cgroup_file, errno, strerror(errno));
+		fclose(cgroup_handle);
+		return -1;
+	}
+
+	fclose(cgroup_handle);
+
+	if (seteuid(original_uid) < 0)
+	{
+		fprintf(stderr, "Error: seteuid failed with error %d, %s\n", errno, strerror(errno));
+		return -1;
+	}
+
+	execvp(argv[2], argv + 2);
+
+	// exec failed
+	fprintf(stderr, "Error: exec failed with error %d, %s\n", errno, strerror(errno));
+	return -1;
 }
