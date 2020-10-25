@@ -23,7 +23,7 @@
 #include <unistd.h>
 #include <pwd.h>
 #include <errno.h>
-
+#include <sys/stat.h>
 #include <linux/limits.h>
 
 #include <lua.h>
@@ -36,18 +36,70 @@
 
 #define config_filename CONFIG_DIR "/dt-run-cgroup.conf"
 
-int is_path_allowed(const char *path)
+int lua_getuserinfo(lua_State *L)
 {
 	struct passwd *pw_info;
-	lua_State *lua;
-	int rc;
 
 	pw_info = getpwuid(geteuid());
 	if (pw_info == NULL)
 	{
-		fprintf(stderr, "Error: failed to obtain username\n");
-		return -1;
+		lua_pushstring(L, "failed to obtain information about current user");
+		lua_error(L);
+		return 0;
 	}
+
+	lua_pushstring(L, pw_info->pw_name);
+	lua_pushinteger(L, pw_info->pw_uid);
+	lua_pushinteger(L, pw_info->pw_gid);
+
+	return 3;
+}
+
+int lua_is_accessible(lua_State *L)
+{
+	struct stat statbuf;
+	uid_t user_uid;
+	gid_t user_gid;
+	int rc;
+
+	if ((lua_gettop(L) < 1) || (!lua_isstring(L, -3)) || (!lua_isinteger(L, -2)) || (!lua_isinteger(L, -1)))
+	{
+		lua_pushstring(L, "function requires 3 arguments");
+		lua_error(L);
+		return 0;
+	}
+
+	rc = stat(lua_tostring(L, -3), &statbuf);
+	if (rc < 0)
+	{
+		lua_pushstring(L, "failed to obtain information about file");
+		lua_error(L);
+		return 0;
+	}
+
+	user_uid = lua_tointeger(L, -2);
+	user_gid = lua_tointeger(L, -1);
+
+	if (user_uid == statbuf.st_uid)
+	{
+		lua_pushboolean(L, statbuf.st_mode & S_IWUSR);
+	}
+	else if (user_gid == statbuf.st_gid)
+	{
+		lua_pushboolean(L, statbuf.st_mode & S_IWGRP);
+	}
+	else
+	{
+		lua_pushboolean(L, statbuf.st_mode & S_IWOTH);
+	}
+
+	return 1;
+}
+
+int is_path_allowed(const char *path)
+{
+	lua_State *lua;
+	int rc;
 
 	lua = luaL_newstate();
 	if (lua == NULL)
@@ -57,6 +109,9 @@ int is_path_allowed(const char *path)
 	}
 
 	luaL_openlibs(lua);
+
+	lua_register(lua, "getuserinfo", &lua_getuserinfo);
+	lua_register(lua, "is_accessible", &lua_is_accessible);
 
 	rc = luaL_dofile(lua, config_filename);
 	if (rc != LUA_OK)
@@ -76,11 +131,9 @@ int is_path_allowed(const char *path)
 		return -1;
 	}
 
-	lua_pushstring(lua, pw_info->pw_name);
-	lua_pushinteger(lua, pw_info->pw_uid);
 	lua_pushstring(lua, path);
 
-	rc = lua_pcall(lua, 3, 1, 0);
+	rc = lua_pcall(lua, 1, 1, 0);
 	if (rc != LUA_OK)
 	{
 		fprintf(stderr, "Error: lua returned error %d while checking path \"%s\"\n", rc, path);
