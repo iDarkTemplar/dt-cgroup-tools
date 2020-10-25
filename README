@@ -1,0 +1,9 @@
+DT CGroup Tools is a collection of helpers for setting up and using cgroups (cgroups v2 only)
+
+dt-run-cgroup-helper is an application for running user application in cgroup.
+It may be used to circumvent cgroup v2 permission restrictions.
+
+dt-run-cgroup-notifier is an application for waiting until cgroup becomes empty.
+
+dt-run-cgroup is a helper script which unites dt-run-cgroup-helper and dt-run-cgroup-notifier
+and uses preconfigured cgroup directory for running an application.
