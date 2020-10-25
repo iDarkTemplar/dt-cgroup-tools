@@ -18,7 +18,105 @@
  *
  */
 
+#include <stdio.h>
+#include <unistd.h>
+#include <pwd.h>
+
+#include <lua.h>
+#include <lauxlib.h>
+#include <lualib.h>
+
+#ifndef CONFIG_DIR
+#error CONFIG_DIR is not defined
+#endif /* CONFIG_DIR */
+
+#define config_filename CONFIG_DIR "/dt-run-cgroup.conf"
+
+int is_path_allowed(const char *path)
+{
+	struct passwd *pw_info;
+	lua_State *lua;
+	int rc;
+
+	pw_info = getpwuid(geteuid());
+	if (pw_info == NULL)
+	{
+		fprintf(stderr, "Error: failed to obtain username\n");
+		return -1;
+	}
+
+	lua = luaL_newstate();
+	if (lua == NULL)
+	{
+		fprintf(stderr, "Error: failed to initialize lua\n");
+		return -1;
+	}
+
+	luaL_openlibs(lua);
+
+	rc = luaL_dofile(lua, config_filename);
+	if (rc != LUA_OK)
+	{
+		fprintf(stderr, "Error: failed to load config file %s, lua error %d\n", config_filename, rc);
+		lua_close(lua);
+		return -1;
+	}
+
+	lua_settop(lua, 0);
+
+	lua_getglobal(lua, "is_directory_allowed");
+	if (!lua_isfunction(lua, -1))
+	{
+		fprintf(stderr, "Error: lua failed to find \"is_directory_allowed\" function\n");
+		lua_close(lua);
+		return -1;
+	}
+
+	lua_pushstring(lua, pw_info->pw_name);
+	lua_pushinteger(lua, pw_info->pw_uid);
+	lua_pushstring(lua, path);
+
+	rc = lua_pcall(lua, 3, 1, 0);
+	if (rc != LUA_OK)
+	{
+		fprintf(stderr, "Error: lua returned error %d while checking path \"%s\"\n", rc, path);
+
+		for (rc = 1; rc <= lua_gettop(lua); ++rc)
+		{
+			fprintf(stderr, "Error: lua error message: %s\n", lua_tostring(lua, rc));
+		}
+
+		lua_close(lua);
+		return -1;
+	}
+
+	rc = lua_isboolean(lua, 1) && lua_toboolean(lua, 1);
+
+	lua_close(lua);
+
+	return rc;
+}
+
 int main(int argc, char **argv)
 {
+	int rc;
+
+	if (argc < 3)
+	{
+		fprintf(stderr, "USAGE: %s cgroup_dir executable [args ...]\n", argv[0]);
+		return -1;
+	}
+
+	rc = is_path_allowed(argv[1]);
+	if (rc == 0)
+	{
+		fprintf(stderr, "Error: path \"%s\" is not allowed for current user\n", argv[1]);
+		return -1;
+	}
+	else if (rc < 0)
+	{
+		return -1;
+	}
+
 	return 0;
 }
