@@ -18,15 +18,16 @@ pkg_search_module(LUA REQUIRED lua lua5.4 lua-5.4 lua54 lua5.3 lua-5.3 lua53 lua
 add_definitions(-D_FILE_OFFSET_BITS=64)
 add_definitions(-DCONFIG_DIR=\"${CONFIG_DIR}\")
 
-set ( SOURCES main.c )
-set ( HEADERS )
-
-add_executable( dt-run-cgroup-helper ${SOURCES} ${HEADERS})
+add_executable( dt-run-cgroup-helper dt-run-cgroup-helper.c)
 target_include_directories( dt-run-cgroup-helper PRIVATE ${LUA_INCLUDE_DIRS} )
 target_link_libraries( dt-run-cgroup-helper ${LUA_LIBRARIES} )
 
+add_executable( dt-run-cgroup-notifier dt-run-cgroup-notifier.c)
+target_link_libraries( dt-run-cgroup-notifier )
+
 # installation config
 install(TARGETS dt-run-cgroup-helper RUNTIME DESTINATION ${BIN_INSTALL_DIR})
+install(TARGETS dt-run-cgroup-notifier RUNTIME DESTINATION ${BIN_INSTALL_DIR})
 install(FILES "dt-run-cgroup.conf" DESTINATION "${CONFIG_DIR}")
 
 install(

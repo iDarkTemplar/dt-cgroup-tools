@@ -160,6 +160,7 @@ int main(int argc, char **argv)
 	char cgroup_file[PATH_MAX] = { 0 };
 	FILE *cgroup_handle;
 	uid_t original_uid;
+	struct stat statbuf;
 
 	if (argc < 3)
 	{
@@ -179,6 +180,18 @@ int main(int argc, char **argv)
 		return -1;
 	}
 
+	if (stat(cgroup_file, &statbuf) < 0)
+	{
+		fprintf(stderr, "Error: stat failed for \"%s\" with error %d: %s\n", cgroup_file, errno, strerror(errno));
+		return -1;
+	}
+
+	if (!S_ISREG(statbuf.st_mode))
+	{
+		fprintf(stderr, "Error: \"%s\" is not a regular file\n", cgroup_file);
+		return -1;
+	}
+
 	rc = is_path_allowed(argv[1]);
 	if (rc == 0)
 	{
@@ -193,20 +206,20 @@ int main(int argc, char **argv)
 	original_uid = geteuid();
 	if (seteuid(0) < 0)
 	{
-		fprintf(stderr, "Error: seteuid failed with error %d, %s\n", errno, strerror(errno));
+		fprintf(stderr, "Error: seteuid failed with error %d: %s\n", errno, strerror(errno));
 		return -1;
 	}
 
 	cgroup_handle = fopen(cgroup_file, "at");
 	if (cgroup_handle == NULL)
 	{
-		fprintf(stderr, "Error: failed to open file \"%s\" with error %d, %s\n", cgroup_file, errno, strerror(errno));
+		fprintf(stderr, "Error: failed to open file \"%s\" with error %d: %s\n", cgroup_file, errno, strerror(errno));
 		return -1;
 	}
 
 	if (fprintf(cgroup_handle, "%llu\n", (unsigned long long) getpid()) < 0)
 	{
-		fprintf(stderr, "Error: failed to write file \"%s\" with error %d, %s\n", cgroup_file, errno, strerror(errno));
+		fprintf(stderr, "Error: failed to write file \"%s\" with error %d: %s\n", cgroup_file, errno, strerror(errno));
 		fclose(cgroup_handle);
 		return -1;
 	}
@@ -215,13 +228,13 @@ int main(int argc, char **argv)
 
 	if (seteuid(original_uid) < 0)
 	{
-		fprintf(stderr, "Error: seteuid failed with error %d, %s\n", errno, strerror(errno));
+		fprintf(stderr, "Error: seteuid failed with error %d: %s\n", errno, strerror(errno));
 		return -1;
 	}
 
 	execvp(argv[2], argv + 2);
 
 	// exec failed
-	fprintf(stderr, "Error: exec failed with error %d, %s\n", errno, strerror(errno));
+	fprintf(stderr, "Error: exec failed with error %d: %s\n", errno, strerror(errno));
 	return -1;
 }
