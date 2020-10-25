@@ -28,7 +28,8 @@ target_link_libraries( dt-run-cgroup-notifier )
 # installation config
 install(TARGETS dt-run-cgroup-helper RUNTIME DESTINATION ${BIN_INSTALL_DIR})
 install(TARGETS dt-run-cgroup-notifier RUNTIME DESTINATION ${BIN_INSTALL_DIR})
-install(FILES "dt-run-cgroup.conf" DESTINATION "${CONFIG_DIR}")
+install(PROGRAMS dt-run-cgroup DESTINATION ${BIN_INSTALL_DIR})
+install(FILES dt-run-cgroup.conf DESTINATION ${CONFIG_DIR})
 
 install(
 	CODE "execute_process(
