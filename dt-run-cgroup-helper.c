@@ -19,12 +19,14 @@
  */
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 #include <pwd.h>
 #include <errno.h>
 #include <sys/stat.h>
 #include <linux/limits.h>
+#include <grp.h>
 
 #include <lua.h>
 #include <lauxlib.h>
@@ -58,18 +60,22 @@ int lua_getuserinfo(lua_State *L)
 int lua_is_accessible(lua_State *L)
 {
 	struct stat statbuf;
+	const char *username;
 	uid_t user_uid;
 	gid_t user_gid;
 	int rc;
+	int ngroups = 0;
+	gid_t *user_gids_array = NULL;
+	int index = 0;
 
-	if ((lua_gettop(L) < 1) || (!lua_isstring(L, -3)) || (!lua_isinteger(L, -2)) || (!lua_isinteger(L, -1)))
+	if ((lua_gettop(L) < 4) || (!lua_isstring(L, -4)) || (!lua_isstring(L, -3)) ||(!lua_isinteger(L, -2)) || (!lua_isinteger(L, -1)))
 	{
-		lua_pushstring(L, "function requires 3 arguments");
+		lua_pushstring(L, "function requires 4 arguments");
 		lua_error(L);
 		return 0;
 	}
 
-	rc = stat(lua_tostring(L, -3), &statbuf);
+	rc = stat(lua_tostring(L, -4), &statbuf);
 	if (rc < 0)
 	{
 		lua_pushstring(L, "failed to obtain information about file");
@@ -77,6 +83,7 @@ int lua_is_accessible(lua_State *L)
 		return 0;
 	}
 
+	username = lua_tostring(L, -3);
 	user_uid = lua_tointeger(L, -2);
 	user_gid = lua_tointeger(L, -1);
 
@@ -90,7 +97,46 @@ int lua_is_accessible(lua_State *L)
 	}
 	else
 	{
-		lua_pushboolean(L, statbuf.st_mode & S_IWOTH);
+		rc = getgrouplist(username, user_gid, NULL, &ngroups);
+		if ((rc < 0) && (ngroups <= 0))
+		{
+			lua_pushstring(L, "failed to obtain information about user groups");
+			lua_error(L);
+			return 0;
+		}
+
+		user_gids_array = malloc(ngroups * sizeof(gid_t));
+		if (user_gids_array == NULL)
+		{
+			lua_pushstring(L, "memory allocation failure");
+			lua_error(L);
+			return 0;
+		}
+
+		rc = getgrouplist(username, user_gid, user_gids_array, &ngroups);
+		if (rc < 0)
+		{
+			free(user_gids_array);
+			lua_pushstring(L, "failed to obtain information about user groups");
+			lua_error(L);
+			return 0;
+		}
+
+		for ( ; index < ngroups; ++index)
+		{
+			if (user_gids_array[index] == statbuf.st_gid)
+			{
+				lua_pushboolean(L, statbuf.st_mode & S_IWGRP);
+				break;
+			}
+		}
+
+		if (index == ngroups)
+		{
+			lua_pushboolean(L, statbuf.st_mode & S_IWOTH);
+		}
+
+		free(user_gids_array);
 	}
 
 	return 1;
