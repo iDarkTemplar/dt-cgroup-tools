@@ -34,8 +34,8 @@ if [ "$(grep populated "$1/cgroup.events" 2>/dev/null | cut -d ' ' -f 2)" = "1" 
 fi
 
 # setup cgroup
-mkdir "$1"
-if [ $? -ne 0 ] ; then
+mkdir "$1" 2>/dev/null
+if [ ! -d "$1" ] ; then
 	echo failed to create directory $1 1>&2
 	exit 1
 fi
