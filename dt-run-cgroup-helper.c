@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2020 i.Dark_Templar <darktemplar@dark-templar-archives.net>
+ * Copyright (C) 2020-2022 i.Dark_Templar <darktemplar@dark-templar-archives.net>
  *
  * This file is part of DT CGroup Tools.
  *
@@ -203,6 +203,7 @@ int is_path_allowed(const char *path)
 int main(int argc, char **argv)
 {
 	int rc;
+	char *resolved_path = NULL;
 	char cgroup_file[PATH_MAX] = { 0 };
 	FILE *cgroup_handle;
 	uid_t original_uid;
@@ -210,44 +211,60 @@ int main(int argc, char **argv)
 
 	if (argc < 3)
 	{
-		fprintf(stderr, "USAGE: %s cgroup_dir executable [args ...]\n", argv[0]);
+		fprintf(stderr, "USAGE: %s cgroup_dir executable [args ...]\n", (argc > 0) ? argv[0] : "dt-run-cgroup-helper");
 		return -1;
 	}
 
-	if (strlen(argv[1]) + sizeof("/cgroup.procs") - 1 >= PATH_MAX)
+	resolved_path = realpath(argv[1], NULL);
+	if (resolved_path == NULL)
 	{
-		fprintf(stderr, "Error: path \"%s/cgroup.procs\" is too long\n", argv[1]);
+		fprintf(stderr, "Error: failed to resolve %s\n", argv[1]);
 		return -1;
 	}
 
-	if (snprintf(cgroup_file, PATH_MAX, "%s/cgroup.procs", argv[1]) < 0)
+	if (strlen(resolved_path) + sizeof("/cgroup.procs") - 1 >= PATH_MAX)
+	{
+		fprintf(stderr, "Error: path \"%s/cgroup.procs\" is too long\n", resolved_path);
+		free(resolved_path);
+		return -1;
+	}
+
+	if (snprintf(cgroup_file, PATH_MAX, "%s/cgroup.procs", resolved_path) < 0)
 	{
 		fprintf(stderr, "Error: failed to process cgroup path\n");
+		free(resolved_path);
 		return -1;
 	}
 
 	if (stat(cgroup_file, &statbuf) < 0)
 	{
 		fprintf(stderr, "Error: stat failed for \"%s\" with error %d: %s\n", cgroup_file, errno, strerror(errno));
+		free(resolved_path);
 		return -1;
 	}
 
 	if (!S_ISREG(statbuf.st_mode))
 	{
 		fprintf(stderr, "Error: \"%s\" is not a regular file\n", cgroup_file);
+		free(resolved_path);
 		return -1;
 	}
 
-	rc = is_path_allowed(argv[1]);
+	rc = is_path_allowed(resolved_path);
 	if (rc == 0)
 	{
-		fprintf(stderr, "Error: path \"%s\" is not allowed for current user\n", argv[1]);
+		fprintf(stderr, "Error: path \"%s\" is not allowed for current user\n", resolved_path);
+		free(resolved_path);
 		return -1;
 	}
 	else if (rc < 0)
 	{
+		free(resolved_path);
 		return -1;
 	}
+
+	free(resolved_path);
+	resolved_path = NULL;
 
 	original_uid = geteuid();
 	if (seteuid(0) < 0)

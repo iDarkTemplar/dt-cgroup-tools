@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2020 i.Dark_Templar <darktemplar@dark-templar-archives.net>
+ * Copyright (C) 2020-2022 i.Dark_Templar <darktemplar@dark-templar-archives.net>
  *
  * This file is part of DT CGroup Tools.
  *
@@ -73,7 +73,7 @@ int main(int argc, char **argv)
 
 	if (argc != 2)
 	{
-		fprintf(stderr, "USAGE: %s cgroup.events\n", argv[0]);
+		fprintf(stderr, "USAGE: %s cgroup.events\n", (argc > 0) ? argv[0] : "dt-run-cgroup-notifier");
 		return -1;
 	}
 
