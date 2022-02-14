@@ -206,7 +206,6 @@ int main(int argc, char **argv)
 	char *resolved_path = NULL;
 	char cgroup_file[PATH_MAX] = { 0 };
 	FILE *cgroup_handle;
-	uid_t original_uid;
 	struct stat statbuf;
 
 	if (argc < 3)
@@ -266,13 +265,6 @@ int main(int argc, char **argv)
 	free(resolved_path);
 	resolved_path = NULL;
 
-	original_uid = geteuid();
-	if (seteuid(0) < 0)
-	{
-		fprintf(stderr, "Error: seteuid failed with error %d: %s\n", errno, strerror(errno));
-		return -1;
-	}
-
 	cgroup_handle = fopen(cgroup_file, "at");
 	if (cgroup_handle == NULL)
 	{
@@ -287,13 +279,14 @@ int main(int argc, char **argv)
 		return -1;
 	}
 
-	fclose(cgroup_handle);
-
-	if (seteuid(original_uid) < 0)
+	if (fflush(cgroup_handle) < 0)
 	{
-		fprintf(stderr, "Error: seteuid failed with error %d: %s\n", errno, strerror(errno));
+		fprintf(stderr, "Error: failed to flush file \"%s\" with error %d: %s\n", cgroup_file, errno, strerror(errno));
+		fclose(cgroup_handle);
 		return -1;
 	}
+
+	fclose(cgroup_handle);
 
 	execvp(argv[2], argv + 2);
 

@@ -41,6 +41,6 @@ install(
 	CODE "execute_process(
 		COMMAND
 		${SETCAP_EXECUTABLE}
-		CAP_SETUID=+ep
+		CAP_DAC_OVERRIDE=+ep
 		\$ENV{DESTDIR}${CMAKE_INSTALL_FULL_BINDIR}/dt-run-cgroup-helper)"
 )
